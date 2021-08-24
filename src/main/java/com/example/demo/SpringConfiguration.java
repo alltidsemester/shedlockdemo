@@ -1,44 +1,42 @@
 package com.example.demo;
 
 import java.time.Duration;
+import javax.sql.DataSource;
 import net.javacrumbs.shedlock.core.LockExtender;
 import net.javacrumbs.shedlock.core.LockProvider;
-import net.javacrumbs.shedlock.provider.redis.jedis.JedisLockProvider;
+import net.javacrumbs.shedlock.provider.jdbctemplate.JdbcTemplateLockProvider;
 import net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.testcontainers.containers.GenericContainer;
-import redis.clients.jedis.JedisPool;
 
 @Configuration
 @EnableScheduling
 @EnableSchedulerLock(defaultLockAtMostFor = "10m")
 public class SpringConfiguration {
 
+  // Need to run postgres for this: 'psql -h localhost -p 5432 -U postgres'
   @Bean
-  public JedisPool jedisPool() {
-    var redis = new GenericContainer<>("redis:5.0.3-alpine").withExposedPorts(6379);
-    redis.start();
-    return new JedisPool("localhost", redis.getFirstMappedPort());
+  public LockProvider lockProvider(DataSource dataSource) {
+    return new JdbcTemplateLockProvider(new JdbcTemplate(dataSource));
   }
 
-  @Bean
-  public LockProvider lockProvider(JedisPool jedisPool) {
-    return new JedisLockProvider(jedisPool);
+  @Scheduled(fixedDelay = 5000)
+  @SchedulerLock(name = "leaderLock", lockAtMostFor = "5s", lockAtLeastFor = "5s")
+  public void tryAcquireLeadership() throws InterruptedException {
+    System.out.println("I am the leader!");
+    while (true) {
+      Thread.sleep(2000);
+      try {
+        LockExtender.extendActiveLock(Duration.ofSeconds(5), Duration.ofSeconds(5));
+      } catch(RuntimeException e) {
+        System.out.println("ERROR! Leadership lock inconsistent! If this happens, we'll need to tweak the timings!");
+        break;
+      }
+    }
   }
 
-  @Scheduled(fixedDelay = 1)
-  @SchedulerLock(name = "scheduledTaskName", lockAtMostFor = "5s", lockAtLeastFor = "4s")
-  public void scheduledTask1() {
-    System.out.println("1 is running!");
-  }
-
-  @Scheduled(fixedDelay = 1)
-  @SchedulerLock(name = "scheduledTaskName", lockAtMostFor = "5s", lockAtLeastFor = "4s")
-  public void scheduledTask2() {
-    System.out.println("2 is running!");
-  }
 }
