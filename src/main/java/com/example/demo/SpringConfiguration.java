@@ -19,6 +19,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 public class SpringConfiguration {
 
   // Need to run postgres for this: 'psql -h localhost -p 5432 -U postgres'
+  /* This table needs to exist:
+  CREATE TABLE shedlock(name VARCHAR(64) NOT NULL, lock_until TIMESTAMP NOT NULL,
+    locked_at TIMESTAMP NOT NULL, locked_by VARCHAR(255) NOT NULL, PRIMARY KEY (name));
+   */
   @Bean
   public LockProvider lockProvider(DataSource dataSource) {
     return new JdbcTemplateLockProvider(new JdbcTemplate(dataSource));
